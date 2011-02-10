@@ -164,7 +164,7 @@ class MysqlAdapter(BaseAdapter):
 		'gte': '>= ?',
 		'eq': '= ?',
 		'ne': '<> ?', # watch yourself with this one
-		'in': 'IN (?)', # special-case to list q-marks
+		'in': 'IN (%s)', # special-case to list q-marks
 		'is': 'IS ?',
 		'icontains': 'ILIKE ?', # surround param with %'s
 		'contains': 'LIKE ?', # surround param with *'s
@@ -555,8 +555,7 @@ class BaseQuery(object):
 					operation = 'IN (%s)'
 				else:
 					lookup_value = [field.db_value(o) for o in rhs]
-					operation = self.operations[op] % \
-						(','.join([self.interpolation for v in lookup_value]))
+					operation = self.operations[op] % (','.join([self.interpolation for v in lookup_value]))
 			elif op == 'is':
 				if rhs is not None:
 					raise ValueError('__is lookups only accept None')
@@ -1089,9 +1088,12 @@ class DateTimeField(Field):
 	db_field = 'datetime'
 	
 	def python_value(self, value):
-		if value is not None:
-			value = value.rsplit('.', 1)[0]
-			return datetime(*time.strptime(value, '%Y-%m-%d %H:%M:%S')[:6])
+		try:
+			if value is not None:
+				value = str(value).rsplit('.', 1)[0]
+				return datetime(*time.strptime(value, '%Y-%m-%d %H:%M:%S')[:6])
+		except ValueError:
+			return None
 
 
 class IntegerField(Field):
@@ -1189,9 +1191,13 @@ class ForeignRelatedObject(object):
 		return getattr(instance, self.cache_name)
 	
 	def __set__(self, instance, obj):
-		assert isinstance(obj, self.to), "Cannot assign %s, invalid type" % obj
-		setattr(instance, self.field_name, obj.get_pk())
-		setattr(instance, self.cache_name, obj)
+		if obj is not None:
+			assert isinstance(obj, self.to), "Cannot assign %s, invalid type" % obj
+			setattr(instance, self.field_name, obj.get_pk())
+			setattr(instance, self.cache_name, obj)
+		else:
+			setattr(instance, self.field_name, None)
+			setattr(instance, self.cache_name, None)
 
 
 class ReverseForeignRelatedObject(object):
@@ -1239,6 +1245,9 @@ class ForeignKeyField(IntegerField):
 		return value or None
 	
 	def db_value(self, value):
+		if value is None:
+			return 0
+		
 		if isinstance(value, int):
 			return value
 		elif hasattr(value, '__class__'):
