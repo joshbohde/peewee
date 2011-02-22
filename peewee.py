@@ -351,6 +351,7 @@ class QueryResultWrapper(object):
 		self.model = model
 		self.cursor = cursor
 		self._result_cache = []
+		self._result_pool = None
 		self._populated = False
 	
 	def model_from_rowset(self, model_class, row_dict):
@@ -367,7 +368,7 @@ class QueryResultWrapper(object):
 		return instance
 	
 	def _row_to_dict(self, row, result_cursor):
-		return DictObj((result_cursor.description[i][0], value) for i, value in enumerate(row))
+		return dict((result_cursor.description[i][0], value) for i, value in enumerate(row))
 	
 	def __iter__(self):
 		if not self._populated:
@@ -376,7 +377,49 @@ class QueryResultWrapper(object):
 			return iter(self._result_cache)
 	
 	def next(self):
-		row = self.cursor.fetchone()
+		if not self._result_pool:
+			try:
+				self._result_pool = self.cursor.fetchall()
+			except Exception, ex:
+				self._populated = True
+				raise StopIteration
+		
+		if len(self._result_pool) == 0:
+			self._populated = True
+			raise StopIteration
+		
+		row = self._result_pool.pop()
+		if row:
+			row_dict = self._row_to_dict(row, self.cursor)
+			
+			if self.model:
+				instance = self.model_from_rowset(self.model, row_dict)
+				
+				self._result_cache.append(instance)
+				return instance
+			else:
+				self._result_cache.append(row_dict)
+				
+				return row_dict
+		else:
+			self._populated = True
+			raise StopIteration
+	
+	def nextold(self):
+		if not self._result_pool:
+			try:
+				self._result_pool = self.cursor.fetchall()
+			except Exception, ex:
+				logger.error(ex)
+				
+				self._populated = True
+				raise StopIteration
+		
+		if len(self._result_pool) == 0:
+			self._populated = True
+			raise StopIteration
+		
+		row = self._result_pool.pop()
 		if row:
 			row_dict = self._row_to_dict(row, self.cursor)
 			if self.model:
