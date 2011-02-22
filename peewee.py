@@ -398,35 +398,8 @@ class QueryResultWrapper(object):
 				self._result_cache.append(instance)
 				return instance
 			else:
-				self._result_cache.append(row_dict)
+				self._result_cache.append(DictObj(row_dict))
 				
-				return row_dict
-		else:
-			self._populated = True
-			raise StopIteration
-	
-	def nextold(self):
-		if not self._result_pool:
-			try:
-				self._result_pool = self.cursor.fetchall()
-			except Exception, ex:
-				logger.error(ex)
-				
-				self._populated = True
-				raise StopIteration
-		
-		if len(self._result_pool) == 0:
-			self._populated = True
-			raise StopIteration
-		
-		row = self._result_pool.pop()
-		if row:
-			row_dict = self._row_to_dict(row, self.cursor)
-			if self.model:
-				instance = self.model_from_rowset(self.model, row_dict)
-				self._result_cache.append(instance)
-				return instance
-			else:
 				return row_dict
 		else:
 			self._populated = True
