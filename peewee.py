@@ -211,17 +211,14 @@ class Database(object):
 		self.database = database
 		self.connect_kwargs = connect_kwargs
 		self.conn = None
-		self.first_connect = True
 	
 	def connect(self):
 		self.conn = self.adapter.connect(self.database, **self.connect_kwargs)
-		self.first_connect = False
 	
 	def ensure_connected(self):
 		is_connected = self.adapter.ensure_connected(self.conn)
 		
-		if not is_connected and not self.first_connect:
-			logger.error('Database connection has gone away, trying to reconnect.')
+		if not is_connected:
 			self.connect()
 		
 		if not self.conn:
@@ -233,6 +230,8 @@ class Database(object):
 	def execute(self, sql, params=(), commit=False, **kwargs):
 		for times_tried in range(0, 3):
 			try:
+				self.ensure_connected()
+				
 				cursor = self.conn.cursor()
 				res = cursor.execute(sql, params or (), **kwargs)
 				if commit:
@@ -240,9 +239,10 @@ class Database(object):
 				logger.debug((sql, params))
 				return res, cursor
 			except:
-				self.ensure_connected()
+				pass
 		
-		logger.error('Database could not be reached for questioning.')
+		raise Exception('Database could not be reached for questioning.')
+		
 	
 	def fetchrows(self, *args, **kwargs):
 		result, cursor = self.execute(*args, **kwargs)
