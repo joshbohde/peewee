@@ -211,14 +211,16 @@ class Database(object):
 		self.database = database
 		self.connect_kwargs = connect_kwargs
 		self.conn = None
+		self.first_connect = True
 	
 	def connect(self):
 		self.conn = self.adapter.connect(self.database, **self.connect_kwargs)
+		self.first_connect = False
 	
 	def ensure_connected(self):
 		is_connected = self.adapter.ensure_connected(self.conn)
 		
-		if not is_connected:
+		if not is_connected and not self.first_connect:
 			logger.error('Database connection has gone away, trying to reconnect.')
 			self.connect()
 		
