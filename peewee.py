@@ -394,7 +394,7 @@ class QueryResultWrapper(object):
 		return instance
 	
 	def _row_to_dict(self, row, result_cursor):
-		return dict((result_cursor.description[i][0], value) for i, value in enumerate(row))
+		return DictObj((result_cursor.description[i][0], value) for i, value in enumerate(row))
 	
 	def __iter__(self):
 		if not self._populated:
@@ -424,7 +424,7 @@ class QueryResultWrapper(object):
 				self._result_cache.append(instance)
 				return instance
 			else:
-				self._result_cache.append(DictObj(row_dict))
+				self._result_cache.append(row_dict)
 				
 				return row_dict
 		else:
