@@ -30,7 +30,7 @@ except ImportError:
 
 
 DATABASE_NAME = os.environ.get('PEEWEE_DATABASE', 'peewee.db')
-logger = logging.getLogger('peewee.logger')
+logger = logging.getLogger()
 
 
 def escape_field_name(name):
@@ -68,6 +68,9 @@ class BaseAdapter(object):
 		return {}
 	
 	def connect(self, database, **kwargs):
+		raise NotImplementedError
+	
+	def ensure_connected(self, database, **kwargs):
 		raise NotImplementedError
 	
 	def close(self, conn):
@@ -184,6 +187,13 @@ class MysqlAdapter(BaseAdapter):
 	def connect(self, database, **kwargs):
 		return oursql.connect(db=database, **kwargs)
 	
+	def ensure_connected(self, conn):
+		try:
+			if conn.ping():
+				return True
+		except:
+			return False
+	
 	def last_insert_id(self, cursor, model):
 		return cursor.lastrowid
 	
@@ -200,23 +210,37 @@ class Database(object):
 		self.adapter = adapter
 		self.database = database
 		self.connect_kwargs = connect_kwargs
+		self.conn = None
 	
 	def connect(self):
 		self.conn = self.adapter.connect(self.database, **self.connect_kwargs)
+	
+	def ensure_connected(self):
+		is_connected = self.adapter.ensure_connected(self.conn)
+		
+		if not is_connected:
+			logger.error('Database connection has gone away, trying to reconnect.')
+			self.connect()
+		
+		if not self.conn:
+			raise Exception("Cannot connect to Database: %s" % (self.database,))
 	
 	def close(self):
 		self.adapter.close(self.conn)
 	
 	def execute(self, sql, params=(), commit=False, **kwargs):
-		if not hasattr(self, 'conn'):
-			self.connect()
+		for times_tried in range(0, 3):
+			try:
+				cursor = self.conn.cursor()
+				res = cursor.execute(sql, params or (), **kwargs)
+				if commit:
+					self.conn.commit()
+				logger.debug((sql, params))
+				return res, cursor
+			except:
+				self.ensure_connected()
 		
-		cursor = self.conn.cursor()
-		res = cursor.execute(sql, params or (), **kwargs)
-		if commit:
-			self.conn.commit()
-		logger.debug((sql, params))
-		return res, cursor
+		logger.error('Database could not be reached for questioning.')
 	
 	def fetchrows(self, *args, **kwargs):
 		result, cursor = self.execute(*args, **kwargs)
