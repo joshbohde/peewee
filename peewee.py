@@ -37,7 +37,7 @@ def escape_field_name(name):
 	if not isinstance(name, basestring):
 		name = unicode(name)
 	
-	if name[0] == '`' and name[-1] == '`':
+	if name.find('(') != -1 or name[0] == '`' and name[-1] == '`':
 		return name
 	
 	parts = name.replace('`', '').split('.')
@@ -194,6 +194,13 @@ class MysqlAdapter(BaseAdapter):
 		except:
 			return False
 	
+	# Return True to continue, False to bail out
+	def handle_exception(self, exception):
+		if isinstance(exception, oursql.ProgrammingError):
+			return True
+		else:
+			return False
+	
 	def last_insert_id(self, cursor, model):
 		return cursor.lastrowid
 	
@@ -238,8 +245,11 @@ class Database(object):
 					self.conn.commit()
 				logger.debug((sql, params))
 				return res, cursor
-			except:
-				pass
+			except Exception, ex:
+				if self.adapter.handle_exception(ex):
+					pass
+				else:
+					raise ex
 		
 		raise Exception('Database could not be reached for questioning.')
 		
@@ -890,7 +900,7 @@ class SelectQuery(BaseQuery):
 			if self.use_aliases() and field in model._meta.fields:
 				field = '%s.%s' % (alias_map[model], field)
 			
-			order_by.append('%s %s' % (escape_field_name(field), ordering))
+			order_by.append('%s %s' % (escape_field_name(field), ordering or ''))
 		
 		pieces = [select]
 		
