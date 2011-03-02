@@ -246,6 +246,8 @@ class Database(object):
 				logger.debug((sql, params))
 				return res, cursor
 			except Exception, ex:
+				logger.error(ex)
+				
 				if self.adapter.handle_exception(ex):
 					pass
 				else:
@@ -388,6 +390,7 @@ class QueryResultWrapper(object):
 		self.cursor = cursor
 		self._result_cache = []
 		self._result_pool = None
+		self._result_pool_idx = 0
 		self._populated = False
 	
 	def model_from_rowset(self, model_class, row_dict):
@@ -416,15 +419,18 @@ class QueryResultWrapper(object):
 		if not self._result_pool:
 			try:
 				self._result_pool = self.cursor.fetchall()
+				self._result_pool_idx = 0
 			except Exception, ex:
 				self._populated = True
 				raise StopIteration
 		
-		if len(self._result_pool) == 0:
+		if len(self._result_pool) == self._result_pool_idx:
 			self._populated = True
 			raise StopIteration
 		
-		row = self._result_pool.pop()
+		row = self._result_pool[self._result_pool_idx]
+		self._result_pool_idx += 1
+		
 		if row:
 			row_dict = self._row_to_dict(row, self.cursor)
 			
