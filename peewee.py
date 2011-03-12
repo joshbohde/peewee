@@ -30,7 +30,17 @@ except ImportError:
 
 
 DATABASE_NAME = os.environ.get('PEEWEE_DATABASE', 'peewee.db')
-logger = logging.getLogger()
+logger = logging.getLogger('peewee')
+
+class NullHandler(logging.Handler):
+	def emit(self, record):
+		pass
+
+
+logger.addHandler(NullHandler())
+
+class ConnectionError(Exception):
+	pass
 
 
 def escape_field_name(name):
@@ -196,10 +206,15 @@ class MysqlAdapter(BaseAdapter):
 	
 	# Return True to continue, False to bail out
 	def handle_exception(self, exception):
-		if isinstance(exception, oursql.ProgrammingError):
-			return True
+		if isinstance(exception, (oursql.InterfaceError, oursql.OperationalError)):
+			logger.debug(exception)
+			return True, True
+		elif isinstance(exception, (oursql.Warning, oursql.CollatedWarningsError)):
+			logger.error(exception)
+			return True, False
 		else:
-			return False
+			logger.error(exception)
+			return False, False
 	
 	def last_insert_id(self, cursor, model):
 		return cursor.lastrowid
@@ -224,18 +239,22 @@ class Database(object):
 	
 	def ensure_connected(self):
 		is_connected = self.adapter.ensure_connected(self.conn)
-		
+	
 		if not is_connected:
 			self.connect()
-		
 		if not self.conn:
-			raise Exception("Cannot connect to Database: %s" % (self.database,))
+			raise ConnectionError("Cannot connect to Database: %s" % (self.database,))
 	
 	def close(self):
 		self.adapter.close(self.conn)
 	
 	def execute(self, sql, params=(), commit=False, **kwargs):
 		for times_tried in range(0, 3):
+			cursor = None
+			res = None
+			handled = False
+			retry_query = False
+			
 			try:
 				self.ensure_connected()
 				
@@ -244,14 +263,23 @@ class Database(object):
 				if commit:
 					self.conn.commit()
 				logger.debug((sql, params))
+				
 				return res, cursor
 			except Exception, ex:
-				logger.error(ex)
-				
-				if self.adapter.handle_exception(ex):
+				if isinstance(ex, ConnectionError):
 					pass
-				else:
+				
+				handled, retry_query = self.adapter.handle_exception(ex)
+				
+				if not handled:
 					raise ex
+			finally:
+				if handled and retry_query:
+					print 'Trying again', times_tried
+				else:
+					return None, None
+				
+				
 		
 		raise Exception('Database could not be reached for questioning.')
 		
