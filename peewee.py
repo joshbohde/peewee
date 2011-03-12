@@ -30,14 +30,8 @@ except ImportError:
 
 
 DATABASE_NAME = os.environ.get('PEEWEE_DATABASE', 'peewee.db')
-logger = logging.getLogger('peewee')
+logger = logging.getLogger()
 
-class NullHandler(logging.Handler):
-	def emit(self, record):
-		pass
-
-
-logger.addHandler(NullHandler())
 
 class ConnectionError(Exception):
 	pass
