@@ -46,7 +46,9 @@ def escape_field_name(name):
 	
 	parts = name.replace('`', '').split('.')
 	
-	return '.'.join(['`%s`' % k for k in parts])
+	final = '.'.join(['`%s`' % k for k in parts])
+	
+	return final.replace("`*`", "*")
 
 
 class BaseAdapter(object):
@@ -173,9 +175,9 @@ class MysqlAdapter(BaseAdapter):
 		'ne': '<> ?', # watch yourself with this one
 		'in': 'IN (%s)', # special-case to list q-marks
 		'is': 'IS ?',
-		'icontains': 'ILIKE ?', # surround param with %'s
+		'icontains': 'LIKE ?', # surround param with %'s
 		'contains': 'LIKE ?', # surround param with *'s
-		'istartswith': 'ILIKE ?',
+		'istartswith': 'LIKE ?',
 		'startswith': 'LIKE ?',
 	}
 	
@@ -1324,8 +1326,10 @@ class ForeignKeyField(IntegerField):
 		
 		if isinstance(value, int):
 			return value
-		elif hasattr(value, '__class__'):
+		elif hasattr(value, '__class__') and issubclass(value.__class__, Model):
 			return value.get_pk()
+		elif value is not None:
+			return value
 		else:
 			return None
 
