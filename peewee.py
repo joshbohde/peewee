@@ -1243,7 +1243,7 @@ class EpochTimestampField(IntegerField):
 		if isinstance(value, datetime):
 			return int(time.mktime(value.timetuple()))
 		
-		self.null_wrapper(value, 0)
+		return self.null_wrapper(value, 0)
 	
 	def python_value(self, value):
 		return datetime.fromtimestamp(int(value or 0))
